@@ -542,14 +542,11 @@ class StudentUSocket(StudentUSocketBase):
     self.bind(dev.ip_addr, 0)
 
     ## Start of Stage 1.1 ##
-    self.snd.nxt = self.snd.iss
-    p = self.new_packet(ack=False, syn=True)
-    self.tx(p)
+    self.snd.nxt = self.snd.iss               # initialize send space next send seq number to iss      
+    p = self.new_packet(ack=False, syn=True)    
+    self.tx(p)                                # send SYN packet
     self.state = SYN_SENT
-    self.snd.nxt = self.snd.nxt |PLUS| 1
-
-    
-
+    self.snd.nxt = self.snd.nxt |PLUS| 1      # update send space next send seq number
     ## End of Stage 1.1 ##
 
   def tx(self, p, retxed=False):
@@ -604,17 +601,30 @@ class StudentUSocket(StudentUSocketBase):
                         CLOSE_WAIT, CLOSING, LAST_ACK, TIME_WAIT):
       if self.acceptable_seg(seg, payload):
         ## Start of Stage 2.1 ##
-        if seg.seq |EQ| self.rcv.nxt:
-          # in-order
-          self.handle_accepted_seg(seg, payload)
-        else: 
-          # out-of-order
-          self.set_pending_ack()
+        # if seg.seq |EQ| self.rcv.nxt:
+        #   # in-order
+        #   self.handle_accepted_seg(seg, payload)
+        # else: 
+        #   # out-of-order
+        #   self.set_pending_ack()
         ## End of Stage 2.1 ##
-        pass
+        
         ## Start of Stage 3.1 ##
         # you may need to remove Stage 2's code.
-
+        self.rx_queue.push(p)
+        while not self.rx_queue.empty():
+          s, p = self.rx_queue.peek()
+          if s |LE| self.rcv.nxt:
+            # process in-order packets
+            self.rx_queue.pop()
+            seg = p.tcp
+            if (s |PLUS| len(seg.payload)) |GE| self.rcv.nxt:
+              new_data_len = s |PLUS| len(seg.payload) |MINUS| self.rcv.nxt
+              self.handle_accepted_seg(seg, seg.payload[-new_data_len:])
+          else:
+            # all in-order packets in the queue have been handled
+            self.set_pending_ack()
+            break
         ## End of Stage 3.1 ##
       else:
         self.set_pending_ack()
@@ -831,8 +841,6 @@ class StudentUSocket(StudentUSocketBase):
     ## Start of Stage 2.2 ##
     if self.state in [ESTABLISHED, FIN_WAIT_1, FIN_WAIT_2] and len(payload) > 0:
       self.handle_accepted_payload(payload)
-
-
     ## End of Stage 2.2 ##
 
     # eight, check FIN bit
