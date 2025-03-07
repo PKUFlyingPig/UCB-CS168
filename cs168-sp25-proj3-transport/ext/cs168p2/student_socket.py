@@ -604,7 +604,12 @@ class StudentUSocket(StudentUSocketBase):
                         CLOSE_WAIT, CLOSING, LAST_ACK, TIME_WAIT):
       if self.acceptable_seg(seg, payload):
         ## Start of Stage 2.1 ##
-        
+        if seg.seq |EQ| self.rcv.nxt:
+          # in-order
+          self.handle_accepted_seg(seg, payload)
+        else: 
+          # out-of-order
+          self.set_pending_ack()
         ## End of Stage 2.1 ##
         pass
         ## Start of Stage 3.1 ##
@@ -693,7 +698,11 @@ class StudentUSocket(StudentUSocketBase):
       payload = payload[:rcv.wnd] # Chop to size!
 
     ## Start of Stage 2.3 ##
-
+    rcv.nxt = rcv.nxt |PLUS| len(payload)   # this is accepted, in-order payload, so update recv space
+    rcv.wnd = rcv.wnd |MINUS| len(payload)  # decrease the recv window because the received payload 
+                                            # is still in the buffer but not consumed by the user
+    self.rx_data += payload
+    self.set_pending_ack()
     ## End of Stage 2.3 ##
 
   def update_window(self, seg):
@@ -820,6 +829,9 @@ class StudentUSocket(StudentUSocketBase):
       return
 
     ## Start of Stage 2.2 ##
+    if self.state in [ESTABLISHED, FIN_WAIT_1, FIN_WAIT_2] and len(payload) > 0:
+      self.handle_accepted_payload(payload)
+
 
     ## End of Stage 2.2 ##
 
