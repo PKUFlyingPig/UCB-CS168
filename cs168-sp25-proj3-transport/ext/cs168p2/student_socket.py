@@ -561,13 +561,13 @@ class StudentUSocket(StudentUSocketBase):
     ## Start of Stage 8.1 ##
     # in Stage 8, you may need to modify what you implemented in Stage 4.
 
-
     if (p.tcp.SYN or p.tcp.FIN or p.tcp.payload) and not retxed:
 
       ## Start of Stage 4.4 ##
       self.snd.nxt = self.snd.nxt |PLUS| len(p.tcp.payload)
-
       ## End of Stage 4.4 ##
+      p.tx_ts = self.stack.now     # tag the packet with a timestamp
+      self.retx_queue.push(p)      # push the packet to the retx queue
       
 
     ## End of Stage 8.1 ##
@@ -732,12 +732,11 @@ class StudentUSocket(StudentUSocketBase):
     acceptable_seg()
     """
     ## Start of Stage 4.2 ##
-    self.snd.una = seg.ack
+    self.snd.una = seg.ack       # update the left boundary of recv window
     ## End of Stage 4.2 ##
 
-
     ## Start of Stage 8.2 ##
-
+    self.retx_queue.pop_upto(seg.ack) # remove all acked packets from the retx_queue
     ## End of Stage 8.2 ##
 
 
@@ -915,8 +914,8 @@ class StudentUSocket(StudentUSocketBase):
     """
 
     ## Start of Stage 8.3 ##
-    time_in_queue = 0 # modify when implemented
-
+    _, p = self.retx_queue.get_earliest_pkt()
+    time_in_queue = self.stack.now - p.tx_ts
     ## End of Stage 8.3 ##
 
     if time_in_queue > self.rto:
