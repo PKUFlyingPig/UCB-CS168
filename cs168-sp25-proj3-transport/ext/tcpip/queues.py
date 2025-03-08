@@ -44,7 +44,7 @@ class Queue (object):
 
 
 class SimpleQueue (Queue):
-  max_size = 20 # None = no limit
+  max_size = None # no limit
   queue = None
   _busy = False # Is a packet currently being transmitted?
   _idle_at = 0 # Last time the queue went idle (use idle_at property!)
