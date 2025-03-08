@@ -430,6 +430,7 @@ class StudentUSocket(StudentUSocketBase):
     super(StudentUSocket, self).__init__(manager)
 
     self.G = manager.TIMER_GRANULARITY # Timer granularity
+    self.R = None
 
     self.fin_ctrl = FinControl(self)
     self.retx_queue = RetxQueue()
@@ -683,7 +684,17 @@ class StudentUSocket(StudentUSocketBase):
     """
 
     ## Start of Stage 9.1 ##
-
+    self.R = self.stack.now - acked_pkt.tx_ts
+    if self.R is None:
+      self.srtt = self.R
+      self.rttvar = self.R/2 
+      self.rto = self.srtt + max(self.G, self.K * self.rttvar)
+    else:
+      self.rttvar = (1-self.beta) * self.rttvar + self.beta * abs(self.srtt - self.R)
+      self.srtt = (1-self.alpha) * self.srtt + self.alpha * self.R
+      self.rto = self.srtt + max(self.G, self.K * self.rttvar)
+    self.rto = min(self.MAX_RTO, self.rto)
+    self.rto = max(self.MIN_RTO, self.rto)
     ## End of Stage 9.1 ##
 
     pass
@@ -736,17 +747,14 @@ class StudentUSocket(StudentUSocketBase):
     ## End of Stage 4.2 ##
 
     ## Start of Stage 8.2 ##
-    self.retx_queue.pop_upto(seg.ack) # remove all acked packets from the retx_queue
+    acked_pkts = self.retx_queue.pop_upto(seg.ack) # remove all acked packets from the retx_queue
     ## End of Stage 8.2 ##
 
 
     ## Start of Stage 9.2 ##
-
-    acked_pkts = [] # remove when implemented
-    for (ackno, p) in acked_pkts:
+    for (_, p) in acked_pkts:
       if not p.retxed:
         self.update_rto(p)
-    
     ## End of Stage 9.2 ##
 
   def handle_accepted_fin(self, seg):
@@ -914,8 +922,10 @@ class StudentUSocket(StudentUSocketBase):
     """
 
     ## Start of Stage 8.3 ##
-    _, p = self.retx_queue.get_earliest_pkt()
-    time_in_queue = self.stack.now - p.tx_ts
+    time_in_queue = 0
+    if not self.retx_queue.empty():
+      _, p = self.retx_queue.get_earliest_pkt()
+      time_in_queue = self.stack.now - p.tx_ts
     ## End of Stage 8.3 ##
 
     if time_in_queue > self.rto:
@@ -923,7 +933,8 @@ class StudentUSocket(StudentUSocketBase):
       self.tx(p, retxed=True)
 
       ## Start of Stage 9.3 ##
-
+      self.rto *= 2
+      self.rto = min(self.MAX_RTO, self.rto)
       ## End of Stage 9.3 ##
 
   def set_pending_ack(self):
