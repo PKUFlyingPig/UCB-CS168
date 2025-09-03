@@ -108,7 +108,7 @@ def check_ttl_expired(icmp: ICMP):
 def check_port_unreachable(icmp: ICMP):
     return icmp.type == 3 and icmp.code == 3
 
-def recv_probe_response(recvsock: util.Socket, ttl: int):
+def recv_probe_response(recvsock: util.Socket):
     while recvsock.recv_select():
         packet, addr = recvsock.recvfrom()
         ipv4 = IPv4(packet)
@@ -156,7 +156,7 @@ def traceroute(sendsock: util.Socket, recvsock: util.Socket, ip: str) \
         routers = []
         for _ in range(PROBE_ATTEMPT_COUNT):
             sendsock.sendto(b"traceroute probe", (ip, TRACEROUTE_PORT_NUMBER))
-            addr = recv_probe_response(recvsock, ttl)
+            addr = recv_probe_response(recvsock)
             if addr is not None and addr not in routers:
                 routers.append(addr)
         util.print_result(routers, ttl)
